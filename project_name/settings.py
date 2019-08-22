@@ -11,10 +11,23 @@ https://docs.djangoproject.com/en/2.2/ref/settings/
 """
 
 import os
+import git
+import dj_database_url
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+DB_FROM_ENV = dj_database_url.parse(os.getenv("DATABASE_URL"))
+
+# Get the application environment
+ENVIRONMENT = os.environ.get('ENVIRONMENT', 'PRODUCTION').lower()
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# Get the GIT repo and branch
+repo = git.Repo(BASE_DIR)
+branch = repo.active_branch
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/2.2/howto/deployment/checklist/
@@ -23,9 +36,12 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = 'pch$e9(58ozd(rtp_hjvnz&*33w!p7#9t%4zqap78*i@jv9cbf'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'FALSE') == 'TRUE'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    '127.0.0.1',
+    'localhost',
+]
 
 
 # Application definition
@@ -39,6 +55,11 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 ]
 
+if DEBUG:
+    INSTALLED_APPS += [
+        'debug_toolbar',
+    ]
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -47,7 +68,13 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
+
+if DEBUG:
+    MIDDLEWARE += [
+        'debug_toolbar.middleware.DebugToolbarMiddleware',
+    ]
 
 ROOT_URLCONF = 'project_name.urls'
 
@@ -80,6 +107,28 @@ DATABASES = {
     }
 }
 
+DATABASES['default'].update(DB_FROM_ENV)
+DATABASES['default']['CONN_MAX_AGE'] = 30
+
+
+# Cache Settings
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": os.environ['REDIS_URL'],
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient"
+        },
+    }
+}
+
+# Celery Settings
+BROKER_URL = os.environ['REDIS_URL']
+CELERY_RESULT_BACKEND = os.environ['REDIS_URL']
+CELERY_RESULT_SERIALIZER = 'pickle'
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_EVENT_SERIALIZER = 'pickle'
+CELERY_ACCEPT_CONTENT = ['json', 'pickle']
 
 # Password validation
 # https://docs.djangoproject.com/en/2.2/ref/settings/#auth-password-validators
@@ -118,3 +167,22 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/2.2/howto/static-files/
 
 STATIC_URL = '/static/'
+
+# STATIC_ROOT = os.environ.get('STATIC_ROOT')
+# MEDIA_ROOT = os.environ.get('MEDIA_ROOT')
+
+# Email Settings
+EMAIL_HOST = os.environ.get('EMAIL_HOST')
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL')
+
+ADMINS = [('Name', 'address@email.com'), ]
+
+ROLLBAR = {
+    'access_token': os.environ.get('ROLLBAR_TOKEN'),
+    'environment': ENVIRONMENT,
+    'branch': branch.name,
+    'root': BASE_DIR,
+    'patch_debugview': False,
+}
